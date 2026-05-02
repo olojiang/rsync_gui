@@ -8,6 +8,7 @@ struct RsyncExecution: Identifiable, Equatable, Sendable {
     var outputLines: [LogLine]
     let startedAt: Date
     var finishedAt: Date?
+    var logFilePath: String?
 
     init(
         id: UUID = UUID(),
@@ -16,7 +17,8 @@ struct RsyncExecution: Identifiable, Equatable, Sendable {
         status: TaskStatus = .pending,
         outputLines: [LogLine] = [],
         startedAt: Date = Date(),
-        finishedAt: Date? = nil
+        finishedAt: Date? = nil,
+        logFilePath: String? = nil
     ) {
         self.id = id
         self.profileId = profileId
@@ -25,5 +27,6 @@ struct RsyncExecution: Identifiable, Equatable, Sendable {
         self.outputLines = outputLines
         self.startedAt = startedAt
         self.finishedAt = finishedAt
+        self.logFilePath = logFilePath
     }
 }

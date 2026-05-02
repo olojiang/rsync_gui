@@ -41,6 +41,12 @@ struct ExecutionPanelView: View {
                     .transition(.opacity)
             }
 
+            if let logFilePath = execVM.execution?.logFilePath {
+                logFileRow(logFilePath)
+                    .padding(.horizontal)
+                    .padding(.bottom, 6)
+            }
+
             LogConsoleView(lines: execVM.execution?.outputLines ?? [])
                 .padding(.horizontal)
                 .padding(.bottom)
@@ -152,6 +158,39 @@ struct ExecutionPanelView: View {
                     .foregroundColor(.secondary)
             }
         }
+    }
+
+    private func logFileRow(_ path: String) -> some View {
+        HStack(spacing: 8) {
+            Text("日志:")
+                .foregroundColor(.secondary)
+            Text(path)
+                .font(.system(size: 11, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "folder")
+                    Text("Finder")
+                }
+            }
+            .buttonStyle(.borderless)
+            .help("在 Finder 中显示日志")
+
+            Button {
+                copyToPasteboard(path)
+                showFeedback("日志路径已复制")
+            } label: {
+                Image(systemName: "doc.on.doc")
+            }
+            .buttonStyle(.borderless)
+            .help("复制日志路径")
+        }
+        .font(.caption)
     }
 
     private func showFeedback(_ message: String) {

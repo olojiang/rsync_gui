@@ -37,8 +37,11 @@ To build and launch:
 ## Highlights
 
 - Live stdout/stderr logs, including `rsync` carriage-return progress updates.
+- Per-run log files under `~/Library/Logs/RsyncGUI`.
 - True process cancellation from the UI.
 - Grouped classic presets, including `-a --human-readable --info=progress2`.
+- Prefers newer Homebrew rsync at `/opt/homebrew/bin/rsync` or `/usr/local/bin/rsync`; falls back to `/usr/bin/rsync`.
+- Automatically downgrades `--info=progress2` to `--progress` when only an old rsync is available.
 - Full command wrapping in the execution panel.
 - Configurable generated-script directory with automatic directory creation.
 - Generated scripts are revealed and selected in Finder after saving.

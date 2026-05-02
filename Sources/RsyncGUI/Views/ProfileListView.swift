@@ -26,7 +26,18 @@ struct ProfileListView: View {
             // no primary action
         }
         .toolbar {
-            ToolbarItem {
+            ToolbarItemGroup {
+                Button {
+                    if let selectedProfile {
+                        editingProfile = selectedProfile
+                        showEditSheet = true
+                    }
+                } label: {
+                    Image(systemName: "pencil")
+                }
+                .disabled(selectedProfile == nil)
+                .help("编辑选中的配置")
+
                 Button {
                     editingProfile = nil
                     showEditSheet = true
@@ -58,22 +69,28 @@ private struct ProfileRow: View {
             Text(profile.name)
                 .lineLimit(1)
             Spacer()
-            Button(action: editAction) {
-                Image(systemName: "pencil")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(isHoveringEdit ? .white : .primary)
-                    .frame(width: 32, height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(isHoveringEdit ? Color.accentColor : Color.clear)
-                    )
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
-            .opacity(isHoveringEdit ? 1 : 0.85)
-            .onHover { isHoveringEdit = $0 }
-            .help("编辑配置")
+            Image(systemName: "pencil")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(isHoveringEdit ? .white : .primary)
+                .frame(width: 34, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isHoveringEdit ? Color.accentColor : Color.clear)
+                )
+                .contentShape(Rectangle())
+                .onHover { isHoveringEdit = $0 }
+                .onTapGesture(perform: editAction)
+                .help("编辑配置")
+                .accessibilityLabel("编辑配置")
+                .accessibilityAddTraits(.isButton)
         }
         .padding(.vertical, 2)
+    }
+}
+
+private extension ProfileListView {
+    var selectedProfile: RsyncProfile? {
+        guard let selectedProfileId = viewModel.selectedProfileId else { return nil }
+        return viewModel.profiles.first { $0.id == selectedProfileId }
     }
 }

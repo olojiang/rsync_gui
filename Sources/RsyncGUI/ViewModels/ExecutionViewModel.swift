@@ -36,9 +36,35 @@ final class ExecutionViewModel: ObservableObject {
             command: profile.buildCommand().joined(separator: " "),
             status: .running
         )
-        self.execution = initialExecution
+        let logWriter: ExecutionLogWriter?
+        do {
+            logWriter = try ExecutionLogWriter(
+                profile: profile,
+                executionId: initialExecution.id,
+                command: initialExecution.command
+            )
+        } catch {
+            logWriter = nil
+            errorMessage = "创建执行日志失败: \(error.localizedDescription)"
+        }
+
+        var executionWithLog = initialExecution
+        executionWithLog.logFilePath = logWriter?.fileURL.path
+        self.execution = executionWithLog
+
+        if let logPath = logWriter?.fileURL.path {
+            let line = LogLine(level: .info, message: "执行日志: \(logPath)")
+            await logWriter?.write(line)
+            if var exec = self.execution {
+                exec.outputLines.append(line)
+                self.execution = exec
+            }
+        }
 
         let result = await executor.execute(profile: profile, executionId: initialExecution.id) { [weak self] line in
+            Task {
+                await logWriter?.write(line)
+            }
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if var exec = self.execution {
@@ -53,9 +79,12 @@ final class ExecutionViewModel: ObservableObject {
             if var exec = self.execution {
                 exec.status = result.status
                 exec.finishedAt = result.finishedAt
+                exec.logFilePath = logWriter?.fileURL.path
                 self.execution = exec
             }
         }
+
+        await logWriter?.writeMessage("Finished with status \(result.status.rawValue)")
 
         await logger.info(
             "Execution finished with status \(result.status)",
