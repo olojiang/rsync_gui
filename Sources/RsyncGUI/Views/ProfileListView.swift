@@ -5,23 +5,27 @@ struct ProfileListView: View {
     let openEditor: (RsyncProfile?) -> Void
 
     var body: some View {
-        List(viewModel.profiles, selection: $viewModel.selectedProfileId) { profile in
-            ProfileRow(
-                profile: profile,
-                editAction: {
-                    openEditor(profile)
-                }
-            )
-            .tag(profile.id)
-        }
-        .contextMenu(forSelectionType: UUID.self) { selection in
-            Button("删除") {
-                for id in selection {
-                    Task { await viewModel.deleteProfile(id: id) }
+        ScrollView {
+            LazyVStack(spacing: 4) {
+                ForEach(viewModel.profiles) { profile in
+                    ProfileRow(
+                        profile: profile,
+                        isSelected: viewModel.selectedProfileId == profile.id,
+                        selectAction: {
+                            AppDiagnostics.log("profile selected: \(profile.name)")
+                            viewModel.selectedProfileId = profile.id
+                        },
+                        editAction: {
+                            openEditor(profile)
+                        },
+                        deleteAction: {
+                            Task { await viewModel.deleteProfile(id: profile.id) }
+                        }
+                    )
                 }
             }
-        } primaryAction: { selection in
-            // no primary action
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
         }
         .toolbar {
             ToolbarItemGroup {
@@ -56,31 +60,70 @@ struct ProfileListView: View {
 
 private struct ProfileRow: View {
     let profile: RsyncProfile
+    let isSelected: Bool
+    let selectAction: () -> Void
     let editAction: () -> Void
+    let deleteAction: () -> Void
 
     @State private var isHoveringEdit = false
+    @State private var isHoveringRow = false
 
     var body: some View {
-        HStack {
-            Text(profile.name)
-                .lineLimit(1)
-            Spacer()
-            Image(systemName: "pencil")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(isHoveringEdit ? .white : .primary)
-                .frame(width: 34, height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(isHoveringEdit ? Color.accentColor : Color.clear)
-                )
-                .contentShape(Rectangle())
-                .onHover { isHoveringEdit = $0 }
-                .onTapGesture(perform: editAction)
-                .help("编辑配置")
-                .accessibilityLabel("编辑配置")
-                .accessibilityAddTraits(.isButton)
+        HStack(spacing: 8) {
+            Button(action: selectAction) {
+                Text(profile.name)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button(action: editAction) {
+                Image(systemName: "pencil")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(isHoveringEdit ? .white : rowForeground)
+                    .frame(width: 34, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(isHoveringEdit ? Color.accentColor : Color.clear)
+                    )
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { isHoveringEdit = $0 }
+            .help("编辑配置")
+            .accessibilityLabel("编辑配置")
         }
-        .padding(.vertical, 2)
+        .padding(.leading, 10)
+        .padding(.trailing, 6)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .foregroundColor(rowForeground)
+        .background(rowBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .onHover { isHoveringRow = $0 }
+        .contextMenu {
+            Button("编辑") {
+                editAction()
+            }
+            Button("删除", role: .destructive) {
+                deleteAction()
+            }
+        }
+    }
+
+    private var rowForeground: Color {
+        isSelected ? .white : .primary
+    }
+
+    private var rowBackground: Color {
+        if isSelected {
+            return Color.accentColor
+        }
+        if isHoveringRow {
+            return Color(nsColor: .selectedContentBackgroundColor).opacity(0.14)
+        }
+        return Color.clear
     }
 }
 

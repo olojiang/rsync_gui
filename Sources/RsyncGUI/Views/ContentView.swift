@@ -16,24 +16,29 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             ProfileListView(
                 viewModel: listVM,
                 openEditor: openEditor
             )
-            .frame(minWidth: 200)
-            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-        } detail: {
-            if let id = listVM.selectedProfileId,
-               let profile = listVM.profiles.first(where: { $0.id == id }) {
-                ExecutionPanelView(
-                    profile: profile,
-                    store: store,
-                    executor: executor
-                )
-            } else {
-                EmptyStateView()
+            .frame(width: 240)
+            .background(Color(nsColor: .controlBackgroundColor))
+
+            Divider()
+
+            Group {
+                if let id = listVM.selectedProfileId,
+                   let profile = listVM.profiles.first(where: { $0.id == id }) {
+                    ExecutionPanelView(
+                        profile: profile,
+                        store: store,
+                        executor: executor
+                    )
+                } else {
+                    EmptyStateView()
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(WindowAccessor(window: $hostWindow))
         .onDisappear {
