@@ -4,7 +4,7 @@ import AppKit
 @main
 struct RsyncGUIApp: App {
     private let store: any ProfileStoreProtocol
-    private let executor: any RsyncExecutorProtocol
+    private let executor: ProcessRsyncExecutor
 
     init() {
         let appSupport = FileManager.default
@@ -20,15 +20,12 @@ struct RsyncGUIApp: App {
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
 
-        // 应用退出时终止所有 rsync 子进程
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: nil
         ) { _ in
-            Task {
-                await executor.cancelAll()
-            }
+            executor.cancelAllImmediately()
         }
     }
 

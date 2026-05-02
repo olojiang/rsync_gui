@@ -39,6 +39,8 @@ To build and launch:
 - Live stdout/stderr logs, including `rsync` carriage-return progress updates.
 - Per-run log files under `~/Library/Logs/RsyncGUI`.
 - True process cancellation from the UI.
+- Closing the app window or quitting the app terminates active rsync child processes.
+- Refuses to start rsync when the source or destination directory does not exist.
 - Grouped classic presets, including `-a --human-readable --info=progress2`.
 - Prefers newer Homebrew rsync at `/opt/homebrew/bin/rsync` or `/usr/local/bin/rsync`; falls back to `/usr/bin/rsync`.
 - Automatically downgrades `--info=progress2` to `--progress` when only an old rsync is available.

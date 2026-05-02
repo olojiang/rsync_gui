@@ -59,6 +59,8 @@ extension RsyncOptionPreset {
 struct ProfileEditView: View {
     @StateObject var viewModel: ProfileEditViewModel
     @Environment(\.dismiss) private var dismiss
+    var onCancel: (() -> Void)?
+    var onSaved: (() -> Void)?
     @State private var selectedPresetId: String = RsyncOptionPreset.custom.id
 
     var body: some View {
@@ -109,13 +111,15 @@ struct ProfileEditView: View {
                         .scaleEffect(0.8)
                 }
                 Button("取消") {
-                    dismiss()
+                    close()
                 }
+                .keyboardShortcut(.cancelAction)
                 Button("保存") {
                     Task {
                         await viewModel.save()
                         if viewModel.saveSuccess {
-                            dismiss()
+                            onSaved?()
+                            close()
                         }
                     }
                 }
@@ -141,6 +145,14 @@ struct ProfileEditView: View {
         } set: { newValue in
             viewModel.profile.options = newValue.split(separator: " ").map(String.init)
             selectedPresetId = RsyncOptionPreset.custom.id
+        }
+    }
+
+    private func close() {
+        if let onCancel {
+            onCancel()
+        } else {
+            dismiss()
         }
     }
 }

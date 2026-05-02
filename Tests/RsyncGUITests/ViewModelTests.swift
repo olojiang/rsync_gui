@@ -51,6 +51,10 @@ actor MockRsyncExecutor: RsyncExecutorProtocol {
     func cancelAll() async {
         // no-op for mock
     }
+
+    nonisolated func cancelAllImmediately() {
+        // no-op for mock
+    }
 }
 
 // MARK: - ProfileListViewModel Tests

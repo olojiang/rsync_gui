@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 protocol RsyncExecutorProtocol: Sendable {
@@ -8,10 +9,12 @@ protocol RsyncExecutorProtocol: Sendable {
     ) async -> RsyncExecution
     func cancel(executionId: UUID) async
     func cancelAll() async
+    func cancelAllImmediately()
 }
 
-actor ProcessRsyncExecutor: RsyncExecutorProtocol {
+final class ProcessRsyncExecutor: RsyncExecutorProtocol, @unchecked Sendable {
     private var activeProcesses: [UUID: Process] = [:]
+    private let processLock = NSLock()
 
     func execute(
         profile: RsyncProfile,
@@ -38,6 +41,15 @@ actor ProcessRsyncExecutor: RsyncExecutorProtocol {
             command: ([rsync.path] + Array(command.dropFirst())).joined(separator: " ")
         )
 
+        if let validationError = Self.validatePaths(profile: profile) {
+            var failedExecution = execution
+            failedExecution.status = .failed
+            failedExecution.finishedAt = Date()
+            onOutput(LogLine(level: .error, message: validationError))
+            onOutput(LogLine(level: .error, message: "未启动 rsync：请先修正目录配置"))
+            return failedExecution
+        }
+
         let process = Process()
         let arguments = Array(command.dropFirst())
         process.arguments = arguments
@@ -49,7 +61,7 @@ actor ProcessRsyncExecutor: RsyncExecutorProtocol {
         process.standardError = stderrPipe
         process.standardInput = FileHandle.nullDevice
 
-        activeProcesses[execution.id] = process
+        insertProcess(process, id: execution.id)
 
         onOutput(LogLine(level: .info, message: "rsync 路径: \(rsync.path)"))
         onOutput(LogLine(level: .info, message: "rsync 版本: \(rsync.versionDescription)"))
@@ -93,13 +105,27 @@ actor ProcessRsyncExecutor: RsyncExecutorProtocol {
                     onOutput(LogLine(level: .error, message: "启动进程失败: \(error.localizedDescription)"))
                 }
 
-                Task { [weak self] in
-                    await self?.removeProcess(id: execution.id)
-                }
+                self?.removeProcess(id: execution.id)
 
                 continuation.resume(returning: mutableExecution)
             }
         }
+    }
+
+    private static func validatePaths(profile: RsyncProfile) -> String? {
+        let fileManager = FileManager.default
+        var isDirectory: ObjCBool = false
+
+        guard fileManager.fileExists(atPath: profile.sourcePath, isDirectory: &isDirectory), isDirectory.boolValue else {
+            return "来源目录不存在或不是目录: \(profile.sourcePath)"
+        }
+
+        isDirectory = false
+        guard fileManager.fileExists(atPath: profile.destinationPath, isDirectory: &isDirectory), isDirectory.boolValue else {
+            return "目标目录不存在或不是目录: \(profile.destinationPath)"
+        }
+
+        return nil
     }
 
     private static func resolveRsync() -> ResolvedRsync? {
@@ -184,20 +210,48 @@ actor ProcessRsyncExecutor: RsyncExecutorProtocol {
         }
     }
 
+    private func insertProcess(_ process: Process, id: UUID) {
+        processLock.lock()
+        activeProcesses[id] = process
+        processLock.unlock()
+    }
+
     private func removeProcess(id: UUID) {
+        processLock.lock()
         activeProcesses.removeValue(forKey: id)
+        processLock.unlock()
     }
 
     func cancel(executionId: UUID) {
-        guard let process = activeProcesses[executionId] else { return }
+        processLock.lock()
+        let process = activeProcesses[executionId]
+        processLock.unlock()
+        guard let process else { return }
         process.terminate()
     }
 
     func cancelAll() {
-        for (_, process) in activeProcesses {
+        cancelAllImmediately()
+    }
+
+    func cancelAllImmediately() {
+        processLock.lock()
+        let processes = Array(activeProcesses.values)
+        activeProcesses.removeAll()
+        processLock.unlock()
+
+        for process in processes where process.isRunning {
             process.terminate()
         }
-        activeProcesses.removeAll()
+
+        let deadline = Date().addingTimeInterval(2)
+        while processes.contains(where: { $0.isRunning }) && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+
+        for process in processes where process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+        }
     }
 }
 
