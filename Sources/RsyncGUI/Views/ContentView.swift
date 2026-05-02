@@ -6,8 +6,7 @@ struct ContentView: View {
     let executor: any RsyncExecutorProtocol
 
     @StateObject private var listVM: ProfileListViewModel
-    @State private var showEditSheet = false
-    @State private var editingProfile: RsyncProfile?
+    @State private var editRequest: ProfileEditRequest?
 
     init(store: any ProfileStoreProtocol, executor: any RsyncExecutorProtocol) {
         self.store = store
@@ -19,8 +18,7 @@ struct ContentView: View {
         NavigationSplitView {
             ProfileListView(
                 viewModel: listVM,
-                showEditSheet: $showEditSheet,
-                editingProfile: $editingProfile
+                editRequest: $editRequest
             )
             .frame(minWidth: 200)
             .navigationSplitViewColumnWidth(min: 200, ideal: 240)
@@ -36,17 +34,23 @@ struct ContentView: View {
                 EmptyStateView()
             }
         }
-        .sheet(isPresented: $showEditSheet, onDismiss: {
+        .sheet(item: $editRequest, onDismiss: {
             Task { await listVM.loadProfiles() }
-        }) {
+        }) { request in
             ProfileEditView(
                 viewModel: ProfileEditViewModel(
-                    profile: editingProfile,
+                    profile: request.profile,
                     store: store
                 )
             )
+            .frame(width: 560, height: 340)
         }
     }
+}
+
+struct ProfileEditRequest: Identifiable {
+    let id = UUID()
+    let profile: RsyncProfile?
 }
 
 private struct EmptyStateView: View {

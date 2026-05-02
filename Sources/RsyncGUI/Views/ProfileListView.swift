@@ -2,16 +2,14 @@ import SwiftUI
 
 struct ProfileListView: View {
     @StateObject var viewModel: ProfileListViewModel
-    @Binding var showEditSheet: Bool
-    @Binding var editingProfile: RsyncProfile?
+    @Binding var editRequest: ProfileEditRequest?
 
     var body: some View {
         List(viewModel.profiles, selection: $viewModel.selectedProfileId) { profile in
             ProfileRow(
                 profile: profile,
                 editAction: {
-                    editingProfile = profile
-                    showEditSheet = true
+                    editRequest = ProfileEditRequest(profile: profile)
                 }
             )
             .tag(profile.id)
@@ -29,8 +27,7 @@ struct ProfileListView: View {
             ToolbarItemGroup {
                 Button {
                     if let selectedProfile {
-                        editingProfile = selectedProfile
-                        showEditSheet = true
+                        editRequest = ProfileEditRequest(profile: selectedProfile)
                     }
                 } label: {
                     Image(systemName: "pencil")
@@ -39,8 +36,7 @@ struct ProfileListView: View {
                 .help("编辑选中的配置")
 
                 Button {
-                    editingProfile = nil
-                    showEditSheet = true
+                    editRequest = ProfileEditRequest(profile: nil)
                 } label: {
                     Image(systemName: "plus")
                 }

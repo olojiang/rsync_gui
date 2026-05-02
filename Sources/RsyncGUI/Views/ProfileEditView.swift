@@ -132,7 +132,7 @@ struct ProfileEditView: View {
             Spacer()
         }
         .padding()
-        .frame(minWidth: 500, minHeight: 280)
+        .frame(minWidth: 540, idealWidth: 560, minHeight: 320, idealHeight: 340)
     }
 
     private var optionsBinding: Binding<String> {
