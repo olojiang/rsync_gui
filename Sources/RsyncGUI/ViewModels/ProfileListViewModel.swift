@@ -16,8 +16,15 @@ final class ProfileListViewModel: ObservableObject {
     }
 
     func loadProfiles() async {
+        await loadProfiles(selecting: nil)
+    }
+
+    func loadProfiles(selecting profileId: UUID?) async {
         do {
             profiles = try await store.loadAll()
+            if let profileId, profiles.contains(where: { $0.id == profileId }) {
+                selectedProfileId = profileId
+            }
             await logger.info("Loaded \(profiles.count) profiles", scope: "ProfileListViewModel")
         } catch {
             errorMessage = error.localizedDescription

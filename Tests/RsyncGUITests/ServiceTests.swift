@@ -149,6 +149,54 @@ final class ServiceTests: XCTestCase {
         XCTAssertTrue(true) // If we reach here without crash, cancel handling is safe
     }
 
+    func testRsyncExecutionQueueRunsOneExecutionAtATime() async {
+        let queue = RsyncExecutionQueue(maxConcurrentExecutions: 1)
+        let firstId = UUID()
+        let secondId = UUID()
+        let secondStarted = AsyncFlag()
+
+        XCTAssertTrue(await queue.waitForTurn(executionId: firstId))
+
+        let secondTask = Task {
+            let canRun = await queue.waitForTurn(executionId: secondId)
+            if canRun {
+                await secondStarted.setTrue()
+            }
+            return canRun
+        }
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertFalse(await secondStarted.value)
+
+        await queue.finish(executionId: firstId)
+
+        let secondCanRun = await secondTask.value
+        XCTAssertTrue(secondCanRun)
+        XCTAssertTrue(await secondStarted.value)
+
+        await queue.finish(executionId: secondId)
+    }
+
+    func testRsyncExecutionQueueCancelsQueuedExecution() async {
+        let queue = RsyncExecutionQueue(maxConcurrentExecutions: 1)
+        let firstId = UUID()
+        let secondId = UUID()
+
+        XCTAssertTrue(await queue.waitForTurn(executionId: firstId))
+
+        let secondTask = Task {
+            await queue.waitForTurn(executionId: secondId)
+        }
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        await queue.cancel(executionId: secondId)
+
+        let secondCanRun = await secondTask.value
+        XCTAssertFalse(secondCanRun)
+
+        await queue.finish(executionId: firstId)
+    }
+
     func testRsyncOutputParserSplitsCarriageReturnProgress() {
         var parser = RsyncOutputParser()
         let lines = parser.append("file.dat\r  1,024  50%\r  2,048 100%\n".data(using: .utf8)!)
@@ -160,5 +208,54 @@ final class ServiceTests: XCTestCase {
         var parser = RsyncOutputParser()
         XCTAssertTrue(parser.append("partial".data(using: .utf8)!).isEmpty)
         XCTAssertEqual(parser.flush(), ["partial"])
+    }
+
+    // MARK: - Finder Sync Service Tests
+
+    func testFinderSelectionParserAcceptsSingleDirectory() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+
+        let path = try FinderSelectionParser.firstDirectoryPath(from: [tempDir])
+
+        XCTAssertEqual(path, tempDir.path)
+    }
+
+    func testFinderSelectionParserRejectsMultipleSelections() throws {
+        let first = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let second = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+
+        XCTAssertThrowsError(try FinderSelectionParser.firstDirectoryPath(from: [first, second])) { error in
+            XCTAssertEqual(error as? FinderSelectionError, .multipleSelection)
+        }
+    }
+
+    func testFinderSelectionParserRejectsFiles() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try "x".write(to: file, atomically: true, encoding: .utf8)
+
+        XCTAssertThrowsError(try FinderSelectionParser.firstDirectoryPath(from: [file])) { error in
+            XCTAssertEqual(error as? FinderSelectionError, .notDirectory(file.path))
+        }
+    }
+
+    func testFinderSyncDraftBuildsDefaultProfile() {
+        let draft = FinderSyncDraft(sourcePath: "/Users/me/Source", destinationPath: "/Volumes/Backup/Dest")
+        let profile = draft.profile
+
+        XCTAssertEqual(profile.name, "Finder 同步: Source -> Dest")
+        XCTAssertEqual(profile.sourcePath, "/Users/me/Source")
+        XCTAssertEqual(profile.destinationPath, "/Volumes/Backup/Dest")
+        XCTAssertEqual(profile.options, FinderSyncDraft.defaultOptions)
+    }
+}
+
+private actor AsyncFlag {
+    private(set) var value = false
+
+    func setTrue() {
+        value = true
     }
 }

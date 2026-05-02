@@ -9,15 +9,10 @@ struct RsyncGUIApp: App {
     private let executor: ProcessRsyncExecutor
 
     init() {
-        let appSupport = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first!
-        let dir = appSupport.appendingPathComponent("RsyncGUI")
-        let fileURL = dir.appendingPathComponent("profiles.json")
-        let store = FileProfileStore(fileURL: fileURL)
-        let executor = ProcessRsyncExecutor()
-        self.store = store
-        self.executor = executor
+        let container = AppContainer.shared
+        store = container.store
+        executor = container.executor
+        let appExecutor = container.executor
 
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
@@ -27,7 +22,7 @@ struct RsyncGUIApp: App {
             object: nil,
             queue: nil
         ) { _ in
-            executor.cancelAllImmediately()
+            appExecutor.cancelAllImmediately()
         }
     }
 
@@ -40,7 +35,20 @@ struct RsyncGUIApp: App {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var finderSyncServiceProvider: FinderSyncServiceProvider?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let provider = FinderSyncServiceProvider(
+            store: AppContainer.shared.store,
+            executor: AppContainer.shared.executor
+        )
+        finderSyncServiceProvider = provider
+        NSApplication.shared.servicesProvider = provider
+        NSUpdateDynamicServices()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }

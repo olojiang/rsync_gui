@@ -14,7 +14,13 @@ protocol RsyncExecutorProtocol: Sendable {
 
 final class ProcessRsyncExecutor: RsyncExecutorProtocol, @unchecked Sendable {
     private var activeProcesses: [UUID: Process] = [:]
+    private var cancelledExecutionIds: Set<UUID> = []
     private let processLock = NSLock()
+    private let executionQueue: RsyncExecutionQueue
+
+    init(maxConcurrentExecutions: Int = 1) {
+        executionQueue = RsyncExecutionQueue(maxConcurrentExecutions: maxConcurrentExecutions)
+    }
 
     func execute(
         profile: RsyncProfile,
@@ -50,6 +56,32 @@ final class ProcessRsyncExecutor: RsyncExecutorProtocol, @unchecked Sendable {
             return failedExecution
         }
 
+        onOutput(LogLine(level: .info, message: "已加入执行队列，等待其他 rsync 完成"))
+        guard await executionQueue.waitForTurn(executionId: execution.id) else {
+            var cancelledExecution = execution
+            cancelledExecution.status = .cancelled
+            cancelledExecution.finishedAt = Date()
+            onOutput(LogLine(level: .warning, message: "排队任务已取消，未启动 rsync"))
+            cleanupCancelledState(id: execution.id)
+            return cancelledExecution
+        }
+
+        let result = await runProcess(
+            execution: execution,
+            command: command,
+            rsync: rsync,
+            onOutput: onOutput
+        )
+        await executionQueue.finish(executionId: execution.id)
+        return result
+    }
+
+    private func runProcess(
+        execution: RsyncExecution,
+        command: [String],
+        rsync: ResolvedRsync,
+        onOutput: @escaping @Sendable (LogLine) -> Void
+    ) async -> RsyncExecution {
         let process = Process()
         let arguments = Array(command.dropFirst())
         process.arguments = arguments
@@ -61,7 +93,14 @@ final class ProcessRsyncExecutor: RsyncExecutorProtocol, @unchecked Sendable {
         process.standardError = stderrPipe
         process.standardInput = FileHandle.nullDevice
 
-        insertProcess(process, id: execution.id)
+        guard insertProcessIfNotCancelled(process, id: execution.id) else {
+            var cancelledExecution = execution
+            cancelledExecution.status = .cancelled
+            cancelledExecution.finishedAt = Date()
+            onOutput(LogLine(level: .warning, message: "排队任务已取消，未启动 rsync"))
+            cleanupCancelledState(id: execution.id)
+            return cancelledExecution
+        }
 
         onOutput(LogLine(level: .info, message: "rsync 路径: \(rsync.path)"))
         onOutput(LogLine(level: .info, message: "rsync 版本: \(rsync.versionDescription)"))
@@ -93,19 +132,21 @@ final class ProcessRsyncExecutor: RsyncExecutorProtocol, @unchecked Sendable {
                     group.wait()
 
                     let exitCode = process.terminationStatus
-                    mutableExecution.status = exitCode == 0 ? .success : .failed
+                    let wasCancelled = self?.wasCancelled(executionId: execution.id) ?? false
+                    mutableExecution.status = wasCancelled ? .cancelled : (exitCode == 0 ? .success : .failed)
                     mutableExecution.finishedAt = Date()
                     onOutput(LogLine(
-                        level: exitCode == 0 ? .info : .error,
+                        level: mutableExecution.status == .success ? .info : .error,
                         message: "执行结束，退出码: \(exitCode)"
                     ))
                 } catch {
-                    mutableExecution.status = .failed
+                    let wasCancelled = self?.wasCancelled(executionId: execution.id) ?? false
+                    mutableExecution.status = wasCancelled ? .cancelled : .failed
                     mutableExecution.finishedAt = Date()
                     onOutput(LogLine(level: .error, message: "启动进程失败: \(error.localizedDescription)"))
                 }
 
-                self?.removeProcess(id: execution.id)
+                self?.removeProcessAndCancelledState(id: execution.id)
 
                 continuation.resume(returning: mutableExecution)
             }
@@ -210,33 +251,69 @@ final class ProcessRsyncExecutor: RsyncExecutorProtocol, @unchecked Sendable {
         }
     }
 
-    private func insertProcess(_ process: Process, id: UUID) {
+    private func insertProcessIfNotCancelled(_ process: Process, id: UUID) -> Bool {
         processLock.lock()
+        if cancelledExecutionIds.contains(id) {
+            processLock.unlock()
+            return false
+        }
         activeProcesses[id] = process
         processLock.unlock()
+        return true
     }
 
-    private func removeProcess(id: UUID) {
+    private func removeProcessAndCancelledState(id: UUID) {
         processLock.lock()
         activeProcesses.removeValue(forKey: id)
+        cancelledExecutionIds.remove(id)
         processLock.unlock()
     }
 
-    func cancel(executionId: UUID) {
+    private func cleanupCancelledState(id: UUID) {
         processLock.lock()
+        cancelledExecutionIds.remove(id)
+        processLock.unlock()
+    }
+
+    private func wasCancelled(executionId: UUID) -> Bool {
+        processLock.lock()
+        let wasCancelled = cancelledExecutionIds.contains(executionId)
+        processLock.unlock()
+        return wasCancelled
+    }
+
+    private func markCancelledAndProcess(executionId: UUID) -> Process? {
+        processLock.lock()
+        cancelledExecutionIds.insert(executionId)
         let process = activeProcesses[executionId]
         processLock.unlock()
+        return process
+    }
+
+    func cancel(executionId: UUID) async {
+        await executionQueue.cancel(executionId: executionId)
+
+        let process = markCancelledAndProcess(executionId: executionId)
+
         guard let process else { return }
         process.terminate()
     }
 
-    func cancelAll() {
-        cancelAllImmediately()
+    func cancelAll() async {
+        await executionQueue.cancelAll()
+        terminateAllImmediately()
     }
 
     func cancelAllImmediately() {
+        Task { await executionQueue.cancelAll() }
+        terminateAllImmediately()
+    }
+
+    private func terminateAllImmediately() {
         processLock.lock()
+        let activeIds = Array(activeProcesses.keys)
         let processes = Array(activeProcesses.values)
+        cancelledExecutionIds.formUnion(activeIds)
         activeProcesses.removeAll()
         processLock.unlock()
 
@@ -252,6 +329,62 @@ final class ProcessRsyncExecutor: RsyncExecutorProtocol, @unchecked Sendable {
         for process in processes where process.isRunning {
             kill(process.processIdentifier, SIGKILL)
         }
+    }
+}
+
+actor RsyncExecutionQueue {
+    private struct Waiter {
+        let executionId: UUID
+        let continuation: CheckedContinuation<Bool, Never>
+    }
+
+    private let maxConcurrentExecutions: Int
+    private var runningCount = 0
+    private var waiters: [Waiter] = []
+
+    init(maxConcurrentExecutions: Int) {
+        self.maxConcurrentExecutions = max(1, maxConcurrentExecutions)
+    }
+
+    func waitForTurn(executionId: UUID) async -> Bool {
+        if runningCount < maxConcurrentExecutions {
+            runningCount += 1
+            return true
+        }
+
+        return await withCheckedContinuation { continuation in
+            waiters.append(Waiter(executionId: executionId, continuation: continuation))
+        }
+    }
+
+    func finish(executionId: UUID) {
+        guard runningCount > 0 else { return }
+        runningCount -= 1
+        startNextIfPossible()
+    }
+
+    func cancel(executionId: UUID) {
+        guard let index = waiters.firstIndex(where: { $0.executionId == executionId }) else {
+            return
+        }
+
+        let waiter = waiters.remove(at: index)
+        waiter.continuation.resume(returning: false)
+    }
+
+    func cancelAll() {
+        let pendingWaiters = waiters
+        waiters.removeAll()
+        for waiter in pendingWaiters {
+            waiter.continuation.resume(returning: false)
+        }
+    }
+
+    private func startNextIfPossible() {
+        guard runningCount < maxConcurrentExecutions, !waiters.isEmpty else { return }
+        let waiter = waiters.removeFirst()
+        runningCount += 1
+        waiter.continuation.resume(returning: true)
     }
 }
 

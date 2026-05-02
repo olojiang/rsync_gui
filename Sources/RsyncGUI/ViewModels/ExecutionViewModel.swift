@@ -34,7 +34,7 @@ final class ExecutionViewModel: ObservableObject {
         let initialExecution = RsyncExecution(
             profileId: profile.id,
             command: profile.buildCommand().joined(separator: " "),
-            status: .running
+            status: .pending
         )
         let logWriter: ExecutionLogWriter?
         do {
@@ -68,6 +68,9 @@ final class ExecutionViewModel: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if var exec = self.execution {
+                    if line.message.hasPrefix("开始执行:") {
+                        exec.status = .running
+                    }
                     exec.outputLines.append(line)
                     self.execution = exec
                 }

@@ -41,6 +41,10 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(WindowAccessor(window: $hostWindow))
+        .onReceive(NotificationCenter.default.publisher(for: .profilesDidChange)) { notification in
+            let selectedProfileId = notification.userInfo?["selectedProfileId"] as? UUID
+            Task { await listVM.loadProfiles(selecting: selectedProfileId) }
+        }
         .onDisappear {
             executor.cancelAllImmediately()
         }

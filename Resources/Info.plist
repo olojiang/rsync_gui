@@ -19,8 +19,59 @@
     <key>LSBackgroundOnly</key>
     <false/>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>1.0.6</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>6</string>
+    <key>NSServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>RsyncGUI - 设为同步来源</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>setSyncSource</string>
+            <key>NSPortName</key>
+            <string>RsyncGUI</string>
+            <key>NSRequiredContext</key>
+            <dict>
+                <key>NSApplicationIdentifier</key>
+                <string>com.apple.finder</string>
+            </dict>
+            <key>NSSendFileTypes</key>
+            <array>
+                <string>public.directory</string>
+            </array>
+            <key>NSSendTypes</key>
+            <array>
+                <string>NSFilenamesPboardType</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>RsyncGUI - 设为同步目标并确认</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>setSyncDestinationAndConfirm</string>
+            <key>NSPortName</key>
+            <string>RsyncGUI</string>
+            <key>NSRequiredContext</key>
+            <dict>
+                <key>NSApplicationIdentifier</key>
+                <string>com.apple.finder</string>
+            </dict>
+            <key>NSSendFileTypes</key>
+            <array>
+                <string>public.directory</string>
+            </array>
+            <key>NSSendTypes</key>
+            <array>
+                <string>NSFilenamesPboardType</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
