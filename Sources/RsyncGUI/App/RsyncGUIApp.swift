@@ -3,6 +3,8 @@ import AppKit
 
 @main
 struct RsyncGUIApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     private let store: any ProfileStoreProtocol
     private let executor: ProcessRsyncExecutor
 
@@ -32,8 +34,14 @@ struct RsyncGUIApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(store: store, executor: executor)
+                .frame(minWidth: 800, minHeight: 500)
         }
         .defaultSize(width: 960, height: 640)
-        .windowResizability(.contentSize)
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
     }
 }

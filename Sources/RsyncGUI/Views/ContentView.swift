@@ -6,7 +6,8 @@ struct ContentView: View {
     let executor: any RsyncExecutorProtocol
 
     @StateObject private var listVM: ProfileListViewModel
-    @State private var editRequest: ProfileEditRequest?
+    @State private var editorWindowController: ProfileEditorWindowController?
+    @State private var hostWindow: NSWindow?
 
     init(store: any ProfileStoreProtocol, executor: any RsyncExecutorProtocol) {
         self.store = store
@@ -15,67 +16,68 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ZStack {
-            NavigationSplitView {
-                ProfileListView(
-                    viewModel: listVM,
-                    editRequest: $editRequest
+        NavigationSplitView {
+            ProfileListView(
+                viewModel: listVM,
+                openEditor: openEditor
+            )
+            .frame(minWidth: 200)
+            .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+        } detail: {
+            if let id = listVM.selectedProfileId,
+               let profile = listVM.profiles.first(where: { $0.id == id }) {
+                ExecutionPanelView(
+                    profile: profile,
+                    store: store,
+                    executor: executor
                 )
-                .frame(minWidth: 200)
-                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
-            } detail: {
-                if let id = listVM.selectedProfileId,
-                   let profile = listVM.profiles.first(where: { $0.id == id }) {
-                    ExecutionPanelView(
-                        profile: profile,
-                        store: store,
-                        executor: executor
-                    )
-                } else {
-                    EmptyStateView()
-                }
-            }
-
-            if let request = editRequest {
-                Color.black.opacity(0.22)
-                    .ignoresSafeArea()
-                    .transition(.opacity)
-
-                ProfileEditView(
-                    viewModel: ProfileEditViewModel(
-                        profile: request.profile,
-                        store: store
-                    ),
-                    onCancel: closeEditor,
-                    onSaved: {
-                        Task { await listVM.loadProfiles() }
-                    }
-                )
-                .frame(width: 560, height: 340)
-                .background(.regularMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-                )
-                .shadow(radius: 24)
-                .transition(.scale(scale: 0.98).combined(with: .opacity))
+            } else {
+                EmptyStateView()
             }
         }
-        .animation(.easeOut(duration: 0.12), value: editRequest?.id)
+        .background(WindowAccessor(window: $hostWindow))
         .onDisappear {
             executor.cancelAllImmediately()
         }
     }
 
-    private func closeEditor() {
-        editRequest = nil
+    private func openEditor(profile: RsyncProfile?) {
+        AppDiagnostics.log("open editor requested: \(profile?.name ?? "new profile")")
+        DispatchQueue.main.async {
+            let controller = ProfileEditorWindowController(
+                profile: profile,
+                store: store,
+                parentWindow: hostWindow,
+                onSaved: {
+                    Task { await listVM.loadProfiles() }
+                },
+                onClose: {
+                    editorWindowController = nil
+                }
+            )
+            editorWindowController = controller
+            controller.show()
+        }
     }
 }
 
-struct ProfileEditRequest: Identifiable {
-    let id = UUID()
-    let profile: RsyncProfile?
+private struct WindowAccessor: NSViewRepresentable {
+    @Binding var window: NSWindow?
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            window = view.window
+            AppDiagnostics.log("host window captured: \(String(describing: view.window?.frame))")
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            window = nsView.window
+        }
+    }
 }
 
 private struct EmptyStateView: View {

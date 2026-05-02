@@ -118,8 +118,11 @@ struct ProfileEditView: View {
                     Task {
                         await viewModel.save()
                         if viewModel.saveSuccess {
-                            onSaved?()
-                            close()
+                            if let onSaved {
+                                onSaved()
+                            } else {
+                                dismiss()
+                            }
                         }
                     }
                 }
