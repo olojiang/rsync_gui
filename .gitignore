@@ -1,0 +1,10 @@
+.DS_Store
+.build/
+*.d
+*.o
+*.swiftdeps
+*.swiftdeps~
+RsyncGUI.app/
+dist/
+Assets/AppIcon.iconset/
+Assets/AppIcon.icns
