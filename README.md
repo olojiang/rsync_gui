@@ -1,6 +1,6 @@
-# RsyncGUI
+# Rsync 纪
 
-RsyncGUI is a native macOS SwiftUI app for creating, editing, and running `rsync` profiles with live logs, grouped option presets, script generation, and Finder integration.
+Rsync 纪 is a native macOS SwiftUI app for creating, editing, and running `rsync` profiles with live logs, grouped option presets, script generation, and Finder integration.
 
 ## Download
 
@@ -8,7 +8,7 @@ RsyncGUI is a native macOS SwiftUI app for creating, editing, and running `rsync
 - Latest release: https://github.com/olojiang/rsync_gui/releases/latest
 - All releases: https://github.com/olojiang/rsync_gui/releases
 
-Download `RsyncGUI-macOS.zip` from the latest release, unzip it, and move `RsyncGUI.app` to `/Applications`.
+Download `RsyncJi-macOS.zip` from the latest release, unzip it, and move `Rsync 纪.app` to `/Applications`.
 
 ## Build Locally
 

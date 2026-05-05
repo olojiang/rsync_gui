@@ -5,6 +5,7 @@
 *.swiftdeps
 *.swiftdeps~
 RsyncGUI.app/
+Rsync 纪.app/
 dist/
 Assets/AppIcon.iconset/
 Assets/AppIcon.icns

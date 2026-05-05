@@ -38,7 +38,7 @@ enum FinderSelectionError: LocalizedError, Equatable {
         case .notDirectory(let path):
             return "选择项不是文件夹: \(path)"
         case .missingSource:
-            return "还没有选择来源。请先在 Finder 中右键来源文件夹，选择“RsyncGUI > 设为同步来源”。"
+            return "还没有选择来源。请先在 Finder 中右键来源文件夹，选择“Rsync 纪 > 设为同步来源”。"
         }
     }
 }
@@ -76,7 +76,7 @@ final class FinderSyncServiceProvider: NSObject {
             UserDefaults.standard.set(sourcePath, forKey: Self.pendingSourceKey)
             showAlert(
                 title: "已选择同步来源",
-                message: "\(sourcePath)\n\n接下来在 Finder 中右键目标文件夹，选择“RsyncGUI > 设为同步目标并确认”。"
+                message: "\(sourcePath)\n\n接下来在 Finder 中右键目标文件夹，选择“Rsync 纪 > 设为同步目标并确认”。"
             )
         } catch {
             report(error, to: serviceError)
@@ -142,6 +142,6 @@ final class FinderSyncServiceProvider: NSObject {
     private func report(_ caughtError: Error, to serviceError: AutoreleasingUnsafeMutablePointer<NSString>) {
         let message = caughtError.localizedDescription
         serviceError.pointee = message as NSString
-        showAlert(title: "RsyncGUI Finder 操作失败", message: message)
+        showAlert(title: "Rsync 纪 Finder 操作失败", message: message)
     }
 }
